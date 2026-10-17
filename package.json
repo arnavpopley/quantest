@@ -1,0 +1,11 @@
+{
+  "name": "quantest",
+  "version": "0.1.0",
+  "description": "Make markets on numbers. A game that trains estimation, fair value, and bid-ask spreads.",
+  "private": true,
+  "scripts": {
+    "start": "python3 -m http.server 8000",
+    "test": "node tests/engine-test.js"
+  },
+  "license": "UNLICENSED"
+}

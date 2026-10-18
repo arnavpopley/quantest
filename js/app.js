@@ -73,7 +73,7 @@
         el("div", { class: "grow" }, [
           el("p", { class: "tiny", style: { color: "rgba(255,255,255,.8)" } }, "QUANTEST"),
           el("h1", { style: { color: "#fff", fontSize: "26px" } }, "Make markets on numbers."),
-          el("p", { style: { color: "rgba(255,255,255,.9)", marginTop: "6px", fontSize: "15px" } }, "Quote a bid and an ask on a real-world number. Traders who know more than you arrive. Re-quote. Settle. Learn estimation, fair value, and spread the way trading desks teach it.")
+          el("p", { style: { color: "rgba(255,255,255,.9)", marginTop: "6px", fontSize: "15px" } }, "Estimate a real-world number, then make a market on it against a screen, an informed analyst, and a crowd. Knowing the number isn't the game; pricing what you don't know is.")
         ])
       ])
     ]));
@@ -122,7 +122,8 @@
     const grid = el("div", { class: "games" });
     grid.append(
       gameCard("🗓️", "Daily #" + info.n, played ? (played.won ? "Solved in " + played.attempts.length + ". Back tomorrow." : "Missed. Back tomorrow.") : "Six quotes. One number. Same for everyone.", () => Daily.play({ onDone: () => render() }), played ? "done" : "new"),
-      gameCard("🎯", "Quick markets", "Three random facts, five rounds each. Hearts on the line.", () => needHeart(() => NumberMarket.play({ facts: shuffle(FACTS.filter(f => f.cat !== "warmup")).slice(0, 3), onDone: () => render() }))),
+      gameCard("🎯", "Quick markets", "Three random facts. Estimate, then quote against the screen, in size.", () => needHeart(() => NumberMarket.play({ facts: shuffle(FACTS.filter(f => f.cat !== "warmup")).slice(0, 3), onDone: () => render() }))),
+      gameCard("🗣️", "Flow drill", "\"Make me a market. I buy. Again.\" Read the counterparty, move the right amount.", () => needHeart(() => FlowDrill.play({ onDone: () => render() }))),
       gameCard("🃏", "Card sum", "Five cards, one flips per round, someone has seen two.", () => needHeart(() => CardSum.play({ onDone: () => render() }))),
       gameCard("🎲", "Dice ladder", "Pay to peek, or quote blind against someone who knows two dice.", () => needHeart(() => DiceLadder.play({ onDone: () => render() }))),
       gameCard("⚡", "Spread arena", "45 live seconds. Spread, skew, inventory, news jumps.", () => needHeart(() => Arena.play({ onDone: () => render() }))),
@@ -237,7 +238,7 @@
     main.appendChild(el("div", { class: "result-row", style: { marginTop: "14px" } }, [
       Lesson.box(String(s.xp), "total xp", "gold"), Lesson.box(String(s.streak), "day streak"), Lesson.box(String(s.plays), "games played")
     ]));
-    const best = [["number-markets", "Quick markets (P&L %)"], ["card-sum", "Card sum (pts)"], ["dice-ladder", "Dice ladder (pts)"], ["arena", "Spread arena (P&L)"], ["daily", "Daily (best score)"]];
+    const best = [["number-markets", "Number markets (P&L %)"], ["flow-drill", "Flow drill (score)"], ["card-sum", "Card sum (pts)"], ["dice-ladder", "Dice ladder (pts)"], ["arena", "Spread arena (P&L)"], ["daily", "Daily (best score)"]];
     main.appendChild(el("div", { class: "card" }, [
       el("h3", {}, "Personal bests"),
       el("table", { class: "table", style: { marginTop: "8px" } }, el("tbody", {}, best.map(([k, label]) => el("tr", {}, [el("td", {}, label), el("td", { class: "num" }, s.best[k] === undefined ? "–" : String(s.best[k]))]))))
@@ -273,7 +274,7 @@
       ]),
       el("div", { class: "card" }, [
         el("h3", {}, "How scoring works"),
-        el("p", { class: "small muted", style: { marginTop: "6px" } }, "P&L is measured as a share of the true number so a market on 46 chromosomes and a market on 86 billion neurons count the same. Blow-ups below −30% cost a heart.")
+        el("p", { class: "small muted", style: { marginTop: "6px" } }, "Three scores per market: your estimate, your market quality against the screen (50 means you matched it), and flow P&L as a share of the true number. XP comes from the market quality, not from knowing the answer. Blow-ups below −30% cost a heart.")
       ])
     );
   }

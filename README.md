@@ -32,7 +32,8 @@ js/ui.js               DOM helpers, number formatting, seeded RNG, haptics, conf
 js/state.js            localStorage: XP, hearts (regen 1 per 10 min), streak, lesson progress, bests
 js/facts.js            the fact bank (~85 numbers with sources) and the six path units
 js/lesson.js           full-screen lesson scaffold, linear ladder, shared quote inputs
-js/games/numberMarket.js   core game: quote a market on a number, analyst converges, settle
+js/games/numberMarket.js   core game: estimate, then quote against the screen, analyst, and crowd
+js/games/flowDrill.js      interview drill: scripted counterparties, scored on reaction
 js/games/cardSum.js        five cards, one flips per round, a peeker knows two
 js/games/diceLadder.js     five dice, pay to peek, counterparty knows two
 js/games/daily.js          six-quote daily puzzle, seeded by date, share grid
@@ -46,17 +47,34 @@ server later for leagues.
 
 ## The core mechanic (Number Markets)
 
-1. A question with a numeric answer appears. The player quotes a bid and an ask.
-2. An **analyst** trades against the market. Their estimate of the true number carries log-normal
-   noise that shrinks every round and is exact on the final round. Early on they only trade when
-   their estimate is well outside the market, so early trades are informative but noisy.
-3. A **noise trader** shows up with probability `0.85 · exp(−3 · width/mid)`. Tight markets get
-   flow; markets wider than about 30% of mid rarely do.
-4. After the final round the number is revealed with its source. Each fill settles against it:
-   short at the ask earns `(ask − T)/T`, long at the bid earns `(T − bid)/T`. P&L is a share of the
-   true value so a market on 46 chromosomes and one on 86 billion neurons score on the same scale.
-5. XP rewards a final market that contains the number, tightness, noise flow captured, and
-   solvency. P&L below −30% costs a heart.
+1. A question with a numeric answer appears. The player gives a point **estimate** (scored on its
+   own), then quotes a bid, an ask, and a size for five rounds.
+2. Round 1 is blind. From round 2 a competitor's quote, the **screen**, is visible. It was there
+   first, so flow only comes to you where your price is strictly better. The screen learns from
+   every print and tightens each round.
+3. An **analyst** holds a Bayesian posterior that sharpens with a private signal every round and
+   is exact on the last. It trades when its edge beats a threshold in posterior-sd units, sizes
+   by edge, trades the screen if that's the better price, and hits harder if you didn't move
+   after its last fill.
+4. A **noise population** of traders with truth-centred, clipped lognormal beliefs trades
+   whenever your price is the best available and outside their belief. Tight markets get more of
+   them; one-sided noise flow means your market is off.
+5. Inventory marks to the screen each round and costs carry. At ±8 the desk cuts your line.
+6. Settlement reports three things: estimate error, **calibration** (interval score against an
+   unbiased reference market with the screen's width schedule; 100 = at least that tight and never
+   missed), and flow P&L as a share of the true value over all units. XP comes from calibration and
+   P&L, never from knowing the number. P&L below −40% costs a heart.
+
+The design target, checked by the strategy tests: an expert beats a screen-copier, a calibrated
+but wrong estimate beats an overconfident one, matching the screen earns nothing, and standing
+still after a hit is the most expensive thing you can do.
+
+## Flow drill
+
+"Make me a market." You quote. "I buy. Again." Five scripted counterparties (persistent buyer,
+persistent seller, bluffer, size tester, patient one) each with a number set relative to your own
+opening mid, trading only at prices better than it. Scored on reaction: did your final market
+contain their number, did you move after each fill, did you stay inside the limit.
 
 The same engine powers the learning path (3 facts per lesson, 6 units), quick play, and hosted
 rooms (host enters a secret number, players quote in turn on the same seed, leaderboard by P&L).

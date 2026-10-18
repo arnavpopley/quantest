@@ -66,7 +66,7 @@ window.Lesson = (function () {
       ladder.appendChild(el("div", { class: "handle bid", style: { left: x(live.bid) + "%" } }));
       ladder.appendChild(el("div", { class: "handle ask", style: { left: x(live.ask) + "%" } }));
     }
-    trades.forEach((t, i) => ladder.appendChild(el("div", { class: "trade " + t.side, style: { left: x(t.price) + "%", top: (i % 2 ? 24 : 2) + "px" } }, (t.side === "buy" ? "▲" : "▼") + (t.round + 1))));
+    trades.forEach((t, i) => ladder.appendChild(el("div", { class: "trade " + t.side, style: { left: x(t.price) + "%", top: (i % 2 ? 22 : 2) + "px" } }, (t.side === "buy" ? "▲" : "▼") + (t.round + 1))));
     if (truth !== null && truth !== undefined) {
       ladder.appendChild(el("div", { class: "truth", style: { left: x(truth) + "%" } }, "★"));
       ladder.appendChild(el("div", { class: "truth-label", style: { left: x(truth) + "%" } }, truth));

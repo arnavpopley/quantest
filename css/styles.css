@@ -283,20 +283,22 @@ label.lab { display: block; font-size: 13px; letter-spacing: .5px; text-transfor
 @media (max-width: 420px) { .widen { grid-template-columns: 1fr 1fr; } }
 
 /* ---------- Ladder (number line) ---------- */
-.ladder { position: relative; height: 100px; margin: 14px 0 6px; }
-.ladder .axis { position: absolute; left: 0; right: 0; top: 56px; height: 4px; background: var(--line); border-radius: 4px; }
-.ladder .band { position: absolute; top: 46px; height: 24px; border-radius: 8px; background: linear-gradient(90deg, var(--bid), var(--ask)); opacity: .9; transition: left .3s ease, width .3s ease; }
+.ladder { position: relative; height: 128px; margin: 14px 0 6px; }
+.ladder .axis { position: absolute; left: 0; right: 0; top: 70px; height: 4px; background: var(--line); border-radius: 4px; }
+.ladder .band { position: absolute; top: 60px; height: 24px; border-radius: 8px; background: linear-gradient(90deg, var(--bid), var(--ask)); opacity: .9; transition: left .3s ease, width .3s ease; }
 .ladder .band.ghost { opacity: .18; }
-.ladder .handle { position: absolute; top: 40px; width: 4px; height: 36px; border-radius: 4px; transform: translateX(-2px); transition: left .3s ease; }
+.ladder .band.screen { top: 42px; height: 12px; border-radius: 6px; background: var(--line-strong); opacity: 1; }
+.ladder .band.screen::after { content: "screen"; position: absolute; right: 0; top: -1px; font-size: 10px; font-weight: 900; color: var(--muted); letter-spacing: .3px; transform: translateX(calc(100% + 6px)); }
+.ladder .handle { position: absolute; top: 54px; width: 4px; height: 36px; border-radius: 4px; transform: translateX(-2px); transition: left .3s ease; }
 .ladder .handle.bid { background: var(--bid-dark); }
 .ladder .handle.ask { background: var(--ask-dark); }
-.ladder .tick { position: absolute; top: 74px; font-size: 11px; color: var(--meta); transform: translateX(-50%); white-space: nowrap; }
-.ladder .trade { position: absolute; top: 8px; transform: translateX(-50%); font-size: 11px; font-weight: 900; padding: 2px 7px; border-radius: 999px; border: 2px solid; background: #fff; white-space: nowrap; animation: drop .35s cubic-bezier(.2,.9,.3,1.2); }
+.ladder .tick { position: absolute; top: 92px; font-size: 11px; color: var(--meta); transform: translateX(-50%); white-space: nowrap; }
+.ladder .trade { position: absolute; top: 2px; transform: translateX(-50%); font-size: 11px; font-weight: 900; padding: 2px 7px; border-radius: 999px; border: 2px solid; background: #fff; white-space: nowrap; animation: drop .35s cubic-bezier(.2,.9,.3,1.2); }
 .ladder .trade.buy { color: var(--ask-dark); border-color: var(--ask); }
 .ladder .trade.sell { color: var(--bid-dark); border-color: var(--bid); }
 .ladder .trade.pass { color: var(--muted); border-color: var(--line); }
-.ladder .truth { position: absolute; top: 30px; transform: translateX(-50%); font-size: 20px; animation: pop .5s cubic-bezier(.2,.9,.3,1.3); }
-.ladder .truth-label { position: absolute; top: 74px; transform: translateX(-50%); font-size: 12px; font-weight: 900; color: var(--gold-dark); white-space: nowrap; }
+.ladder .truth { position: absolute; top: 60px; width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 3px solid var(--gold); color: var(--gold-dark); font-size: 13px; line-height: 18px; text-align: center; transform: translateX(-50%); animation: pop .5s cubic-bezier(.2,.9,.3,1.3); z-index: 2; }
+.ladder .truth-label { position: absolute; top: 92px; transform: translateX(-50%); font-size: 12px; font-weight: 900; color: var(--gold-dark); white-space: nowrap; background: var(--paper); padding: 0 4px; z-index: 2; }
 @keyframes drop { from { transform: translate(-50%, -16px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
 @keyframes pop { from { transform: translate(-50%, 10px) scale(.4); opacity: 0; } to { transform: translate(-50%, 0) scale(1); opacity: 1; } }
 

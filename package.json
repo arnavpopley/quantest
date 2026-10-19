@@ -3,9 +3,12 @@
   "version": "0.1.0",
   "description": "Make markets on numbers. A game that trains estimation, fair value, and bid-ask spreads.",
   "private": true,
+  "bin": { "qt": "cli/quantest.js" },
   "scripts": {
     "start": "python3 -m http.server 8000",
-    "test": "node tests/engine-test.js"
+    "test": "node tests/engine-test.js && node tests/cli-test.js",
+    "play": "node cli/quantest.js",
+    "setup-claude": "node cli/install.js"
   },
   "license": "UNLICENSED"
 }

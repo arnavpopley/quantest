@@ -24,6 +24,19 @@ by `<script>` tags in `index.html` (order matters: ui → state → facts → le
 - `js/facts.js` — fact bank; every fact needs `id, q, a, unit, cat, tol, note`. `cat` must be a
   unit id and each unit needs at least `lessons × 3` facts.
 
+## Terminal client (`cli/`)
+
+- `cli/engines.js` loads the browser engine files into a Node `vm` with a DOM shim. Never fork the
+  engines for the terminal; change them in `js/games/` and both front ends pick it up.
+- `cli/run.js` wraps an engine as `{ kind, seed, factId, actions }` so a market can be saved and
+  replayed exactly. Anything that changes engine randomness order breaks resume of saved markets.
+- `cli/hook.js` runs as an async Claude Code hook. It must never print to stdout (UserPromptSubmit
+  stdout goes into Claude's context) and must exit 0 even on errors (they go to `~/.quantest/hook.log`).
+- State is JSON in `~/.quantest` (`QUANTEST_HOME` overrides; tests use a temp dir).
+- `CLAUDE_CODE_REMOTE=true` disables auto-open, so hooks are inert in cloud sessions. To try the
+  tmux flow there, `unset CLAUDE_CODE_REMOTE` inside the tmux pane.
+- `npm test` runs `tests/cli-test.js` too: replay, layout at 44–120 columns, hook state, installer.
+
 ## Conventions
 
 - British spelling in UI copy. Sentence case. No exclamation marks in verdicts.

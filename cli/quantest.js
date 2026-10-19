@@ -359,11 +359,22 @@ function submit() {
   else {
     const t = trades[0], pos = R.position(S.run);
     const posWord = pos === 0 ? "flat" : (pos > 0 ? "long " : "short ") + Math.abs(pos);
-    S.verdict = {
-      tone: "warn",
-      title: (t.side === "buy" ? "Someone lifted your offer at " : "Someone hit your bid at ") + fmt(t.price) + (trades.length > 1 ? " (and more)." : "."),
-      sub: (t.side === "buy" ? "A buyer thinks the " + word + " is higher than your ask." : "A seller thinks the " + word + " is lower than your bid.") + " You're " + posWord + "."
-    };
+    const sides = new Set(trades.map(x => x.side));
+    if (sides.size === 2) {
+      // one trader hit the bid, another lifted the offer: a round trip through the spread
+      const p = R.lastQuote(S.run);
+      S.verdict = {
+        tone: "ok",
+        title: "Both sides traded: bought at " + fmt(p.bid) + ", sold at " + fmt(p.ask) + ".",
+        sub: "That round trip earns you the " + fmt(p.ask - p.bid) + " spread. At most one of them was the informed trader; the other was flow. You're " + posWord + "."
+      };
+    } else {
+      S.verdict = {
+        tone: "warn",
+        title: (trades.length > 1 ? "Two traders " + (t.side === "buy" ? "lifted your offer" : "hit your bid") + " at " : t.side === "buy" ? "Someone lifted your offer at " : "Someone hit your bid at ") + fmt(t.price) + ".",
+        sub: (t.side === "buy" ? (trades.length > 1 ? "Buyers think" : "A buyer thinks") + " the " + word + " is higher than your ask." : (trades.length > 1 ? "Sellers think" : "A seller thinks") + " the " + word + " is lower than your bid.") + " You're " + posWord + "."
+      };
+    }
   }
   S.phase = "fills";
 }

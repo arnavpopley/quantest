@@ -305,11 +305,14 @@ function resultBody() {
   const width = run.kind === "nm" ? st.finalWidthPct.toFixed(0) + "% wide vs truth" : "noise captured " + (st.noise || 0);
   out.push("  " + (st.containsFinal ? c.green("contained it") : c.red("missed it")) + c.dim(" · ") + width + c.dim(" · ") + c.yellow("+" + st.xp + " xp"));
   out.push("");
-  tradeLog(run, true).forEach(l => out.push(l));
+  // verdict and coaching go above the trade log so a short window never cuts them off
+  const idle = !st.trades.length;
+  const verdict = st.blownUp ? "Blown up." : idle ? "Flat. Nobody traded with you." : pos ? (run.kind === "nm" ? "Profitable market." : run.kind === "cs" ? "Profitable table." : "Information paid for itself.") : (run.kind === "nm" ? "You paid the informed trader." : run.kind === "cs" ? "The peeker got you." : "You paid for information and still lost.");
+  const tip = idle ? "Safe, but a market nobody trades earns nothing. Noise flow is the only source of profit: keep the truth inside your market and tighten until flow arrives." : R.tip(run);
+  out.push("  " + (idle ? c.yellow : pos ? c.green : c.red)(c.bold(verdict)));
+  wrap(tip, W - 4).forEach(l => out.push("  " + c.dim(l)));
   out.push("");
-  const verdict = st.blownUp ? "Blown up." : pos ? (run.kind === "nm" ? "Profitable market." : run.kind === "cs" ? "Profitable table." : "Information paid for itself.") : (run.kind === "nm" ? "You paid the informed trader." : run.kind === "cs" ? "The peeker got you." : "You paid for information and still lost.");
-  out.push("  " + (pos ? c.green : c.red)(c.bold(verdict)));
-  wrap(R.tip(run), W - 4).forEach(l => out.push("  " + c.dim(l)));
+  tradeLog(run, true).forEach(l => out.push(l));
   return out;
 }
 

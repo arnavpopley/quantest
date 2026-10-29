@@ -65,6 +65,29 @@ let overflow = 0;
   });
 });
 check("no screen line wider than the terminal", overflow === 0, overflow);
+// ---- switching games keeps each market where you left it ----
+process.stdout.columns = 80; process.stdout.rows = 30;
+try { fs.unlinkSync(C.FILES.save); } catch (e) { /* none */ }
+Q.startRun("nm");
+const nmFact = Q.S.run.factId;
+"100".split("").forEach(Q.onKey); Q.onKey("\t"); "900".split("").forEach(Q.onKey); Q.onKey("\r"); // quote round 1
+Q.onKey("2");
+check("1-3 jump to a game after a fill", Q.S.run.kind === "cs" && Q.S.phase === "quote");
+"30".split("").forEach(Q.onKey); Q.onKey("\t"); "40".split("").forEach(Q.onKey); Q.onKey("\r");
+Q.onKey("s"); Q.onKey("s");
+check("s cycles through the games", Q.S.run.kind === "nm");
+check("number market resumes on round 2 with the same question", Q.S.run.factId === nmFact && Q.S.run.eng.state.round === 1);
+check("its last quote is prefilled", Q.S.fields.bid === "100" && Q.S.fields.ask === "900");
+const sv = Q.saves();
+check("each game keeps its own saved market", sv.nm && sv.cs && sv.cs.actions.length === 1);
+const bar = strip(Q.screen()[1]);
+check("tab bar shows all three games and the switch key", /Number markets/.test(bar) && /Card sum ·r2/.test(bar) && /Dice ladder/.test(bar) && /s switch/.test(bar), bar);
+process.stdout.columns = 44;
+const narrow = strip(Q.screen()[1]);
+check("tab bar shortens on narrow terminals", narrow.length <= 44 && /Numbers/.test(narrow) && /Cards/.test(narrow), narrow);
+fs.writeFileSync(C.FILES.save, JSON.stringify(sv.cs)); // old single-market save file
+check("old single-market saves still load", Q.saves().cs && Q.saves().cs.seed === sv.cs.seed);
+
 check("key splitter separates arrows from typing", JSON.stringify(Q.splitKeys("12\x1b[A\t")) === JSON.stringify(["1", "2", "\x1b[A", "\t"]));
 
 // ---- the hook keeps per-session status and never writes to stdout ----

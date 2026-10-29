@@ -117,6 +117,25 @@ function parsed() {
   return { bid: b, ask: a, ok: okBid && a > b && isFinite(a) && isFinite(b) };
 }
 
+// Each game keeps its own unfinished market, so switching never throws one away.
+function saves() {
+  const sv = C.readJSON(C.FILES.save, null);
+  if (!sv || typeof sv !== "object") return {};
+  if (sv.kind) return { [sv.kind]: sv }; // single-market format from before switching existed
+  return sv;
+}
+function writeSaves(all) {
+  if (Object.keys(all).length) C.writeJSON(C.FILES.save, all);
+  else { try { fs.unlinkSync(C.FILES.save); } catch (e) { /* none */ } }
+}
+function save() {
+  if (!S.run) return;
+  const all = saves();
+  if (R.done(S.run)) delete all[S.run.kind]; else all[S.run.kind] = R.serialise(S.run);
+  writeSaves(all);
+}
+function roundOf(sv) { return sv.actions.filter(a => a.t === "quote").length + 1; }
+
 function startRun(kind) {
   S.run = R.create(kind, S.stats.recent);
   S.stats.lastKind = kind;
@@ -124,17 +143,30 @@ function startRun(kind) {
   setFieldsFrom(null);
   save();
 }
-function resume() {
-  const sv = C.readJSON(C.FILES.save, null);
+function resume(kind) {
+  const all = saves();
+  kind = kind || (all[S.stats.lastKind] ? S.stats.lastKind : Object.keys(all)[0]);
+  const sv = kind && all[kind];
   if (!sv) return false;
-  try { S.run = R.build(sv); } catch (e) { try { fs.unlinkSync(C.FILES.save); } catch (e2) { /* gone */ } return false; }
-  S.screen = "game"; S.phase = "quote"; S.verdict = null; S.recorded = false;
+  try { S.run = R.build(sv); } catch (e) { delete all[kind]; writeSaves(all); return false; }
+  S.stats.lastKind = kind;
+  S.screen = "game"; S.phase = "quote"; S.verdict = null; S.err = ""; S.recorded = false;
   setFieldsFrom(R.lastQuote(S.run));
   return true;
 }
-function save() {
-  if (S.run && !R.done(S.run)) C.writeJSON(C.FILES.save, R.serialise(S.run));
-  else { try { fs.unlinkSync(C.FILES.save); } catch (e) { /* none */ } }
+// A market whose last round was quoted but not yet settled on screen still counts.
+function settleIfDone() { if (S.run && R.done(S.run) && !S.recorded) advance(); }
+
+function switchTo(kind) {
+  if (S.screen === "game" && S.run && S.run.kind === kind && S.phase !== "result") return;
+  settleIfDone();
+  save();
+  if (!resume(kind)) startRun(kind);
+  C.writeJSON(C.FILES.stats, S.stats);
+}
+function nextKind() {
+  const i = S.run ? R.ORDER.indexOf(S.run.kind) : -1;
+  return R.ORDER[(i + 1) % R.ORDER.length];
 }
 
 // ---------------- rendering ----------------
@@ -156,12 +188,14 @@ function claudeBadge() {
 }
 
 function header() {
-  const left = c.bold(c.blue(" QUANTEST")) + (S.run && S.screen === "game" ? c.dim("  " + R.GAMES[S.run.kind].title) : "");
+  const left = c.bold(c.blue(" QUANTEST"));
   const right = claudeBadge() + " ";
   let l = left;
   if (W - vlen(l) - vlen(right) < 1) l = c.bold(c.blue(" QUANTEST"));
   const gap = W - vlen(l) - vlen(right);
-  const lines = [(gap >= 1 ? l + " ".repeat(gap) : "") + right, c.dim("─".repeat(W))];
+  const lines = [(gap >= 1 ? l + " ".repeat(gap) : "") + right];
+  if (S.screen === "game") lines.push(tabBar());
+  lines.push(c.dim("─".repeat(W)));
   if (S.banner) {
     const b = S.banner;
     const secs = b.deadline ? Math.max(0, Math.ceil((b.deadline - Date.now()) / 1000)) : null;
@@ -171,6 +205,25 @@ function header() {
     lines.push((b.kind === "waiting" ? c.bgRed : c.bgGreen)(padR(text, W)));
   }
   return lines;
+}
+
+// One line, always visible in a game: the three games, the current one highlighted,
+// a dot on any with a market waiting, and the key that switches.
+const SHORT = { nm: "Numbers", cs: "Cards", dl: "Dice" };
+function tabBar() {
+  const all = saves();
+  const cur = S.run && S.run.kind;
+  const typing = S.phase === "quote";
+  const hint = typing ? "s switch" : "1-3 or s switch";
+  const build = names => R.ORDER.map((k, i) => {
+    const waiting = k !== cur && all[k] && all[k].actions.length > 0; // untouched markets aren't flagged
+    const label = " " + (i + 1) + " " + names(k) + (waiting ? " ·r" + roundOf(all[k]) : "") + " ";
+    return k === cur ? c.bgBlue(c.bold(label)) : waiting ? c.yellow(label) : c.dim(label);
+  }).join(" ");
+  let tabs = build(k => R.GAMES[k].title);
+  if (vlen(tabs) + vlen(hint) + 2 > W) tabs = build(k => SHORT[k]);
+  const showHint = vlen(tabs) + vlen(hint) + 2 <= W;
+  return tabs + (showHint ? " ".repeat(W - vlen(tabs) - vlen(hint) - 1) + c.dim(hint) : "");
 }
 
 function screen() {
@@ -192,15 +245,16 @@ function render() {
 
 function menuBody() {
   const out = [""];
-  const sv = C.readJSON(C.FILES.save, null);
+  const all = saves();
   R.ORDER.forEach((k, i) => {
     const g = R.GAMES[k], st = S.stats.games[k] || { n: 0, sum: 0 };
     const avg = st.n ? (k === "nm" ? pct(st.sum / st.n) : signed(st.sum / st.n) + " pts") + " avg over " + st.n : "not played yet";
     out.push("  " + c.bold(c.blue(String(i + 1))) + "  " + padR(c.bold(g.title), 18) + c.dim(g.blurb));
-    out.push("      " + c.dim(avg));
+    out.push("      " + c.dim(avg) + (all[k] && all[k].actions.length ? c.yellow("  · market open, round " + roundOf(all[k])) : ""));
   });
   out.push("");
-  if (sv) out.push("  " + c.bold("enter") + "  resume your " + R.GAMES[sv.kind].title.toLowerCase() + " market (round " + (sv.actions.filter(a => a.t === "quote").length + 1) + ")");
+  const k0 = all[S.stats.lastKind] ? S.stats.lastKind : Object.keys(all)[0];
+  if (k0) out.push("  " + c.bold("enter") + "  carry on with " + R.GAMES[k0].title.toLowerCase() + " (round " + roundOf(all[k0]) + ")");
   out.push("");
   out.push("  " + c.yellow("XP " + (S.stats.xp || 0)));
   return out;
@@ -319,14 +373,14 @@ function resultBody() {
 function footer() {
   const back = S.origin && (S.origin.pane || S.origin.app) ? "back to Claude" : "quit";
   let keys;
-  if (S.screen === "menu") keys = [["1-3", "play"], ["enter", "resume"], ["esc", back]];
+  if (S.screen === "menu") keys = [["1-3", "play"], ["enter", "carry on"], ["esc", back]];
   else if (S.phase === "quote") {
     keys = [["enter", "quote"], ["tab", "bid/ask"], ["↑↓", S.run.kind === "nm" ? "±10%" : "±1"], ["[ ]", "wider/tighter"], ["< >", "shift"]];
     if (S.run.kind === "dl") keys.push(["p", "peek"]);
     if (S.run.kind === "cs") keys.push(["?", "fair value"]);
-    keys.push(["esc", back]);
-  } else if (S.phase === "fills") keys = [["enter", R.done(S.run) ? "settle" : "next round"], ["esc", back]];
-  else keys = [["enter", "next market"], ["m", "menu"], ["1-3", "switch game"], ["esc", back]];
+    keys.push(["s", "switch game"], ["esc", back]);
+  } else if (S.phase === "fills") keys = [["enter", R.done(S.run) ? "settle" : "next round"], ["1-3 s", "switch game"], ["esc", back]];
+  else keys = [["enter", "next market"], ["1-3 s", "switch game"], ["m", "menu"], ["esc", back]];
   const lines = [""]; let plain = 0;
   keys.forEach(([k, d]) => {
     const n = k.length + d.length + 3;
@@ -399,19 +453,23 @@ function onKey(key) {
   if (key === "\x03" || key === "\x1b") return back();
   if (S.banner && S.banner.deadline) { S.banner.deadline = null; render(); return; } // any other key: stay
   if (S.screen === "menu") {
-    if (/^[123]$/.test(key)) startRun(R.ORDER[+key - 1]);
+    if (/^[123]$/.test(key)) switchTo(R.ORDER[+key - 1]);
+    else if (key === "s") switchTo(S.stats.lastKind || "nm");
     else if (key === "\r" && !resume()) startRun(S.stats.lastKind || "nm");
     else if (key === "q") return back();
     return render();
   }
+  // s switches from anywhere (it is never part of a number); 1-3 jump when nothing is being typed
+  if (key === "s" || key === "S") { switchTo(nextKind()); return render(); }
   if (S.phase === "result") {
     if (key === "\r" || key === " ") startRun(S.run.kind);
     else if (key === "m") { S.screen = "menu"; S.run = null; }
-    else if (/^[123]$/.test(key)) startRun(R.ORDER[+key - 1]);
+    else if (/^[123]$/.test(key)) switchTo(R.ORDER[+key - 1]);
     return render();
   }
   if (S.phase === "fills") {
     if (key === "\r" || key === " ") advance();
+    else if (/^[123]$/.test(key)) switchTo(R.ORDER[+key - 1]);
     return render();
   }
   // quote phase
@@ -488,6 +546,7 @@ function back() {
   if (leaving) return;
   if (!hasReturn() && process.env.TMUX && S.signalled) { S.signalled = false; require("child_process").spawnSync("tmux", ["last-pane"]); return; }
   leaving = true;
+  settleIfDone();
   save();
   const g = C.readJSON(C.FILES.game, {}) || {};
   dropGameFile();
@@ -576,4 +635,4 @@ if (require.main === module) {
   else play(args);
 }
 
-module.exports = { S, screen, onKey, splitKeys, startRun, resume, ladder, parsed, setFieldsFrom, poll, dims };
+module.exports = { S, screen, onKey, splitKeys, startRun, resume, switchTo, saves, ladder, parsed, setFieldsFrom, poll, dims };

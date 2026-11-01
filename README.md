@@ -38,6 +38,11 @@ Then restart any open Claude Code sessions.
 In the game: type numbers like `150`, `2.5k`, `1.2m`; `tab` switches bid and ask, `enter` quotes,
 `↑↓` nudge, `[ ]` widen or tighten, `< >` shift, `esc` goes back to Claude.
 
+**Pause it for an hour:** press `z` in the game (or run `qt pause`, or `qt pause 30m`). The game
+closes and stops opening on its own until the time shown in its header; Claude is still tracked,
+you still get notified, and when Claude finishes or needs permission your terminal is still brought
+back to Claude. Open the game by hand any time; `z` there, or `qt resume`, turns auto-open back on.
+
 `qt status` shows what each Claude session is doing. Settings live in `~/.quantest/config.json`:
 
 | key | default | what it does |
@@ -45,6 +50,8 @@ In the game: type numbers like `150`, `2.5k`, `1.2m`; `tab` switches bid and ask
 | `autoOpen` | `true` | open the game when Claude starts working |
 | `openAfter` | `8` | seconds a turn must run before the game opens; quicker replies never interrupt you |
 | `returnAfter` | `5` | countdown before jumping back; `0` means notify only |
+| `pauseFor` | `60` | minutes that `z` or `qt pause` stops auto-open |
+| `pauseFocus` | `true` | while paused, still switch you to Claude when it finishes or needs permission |
 | `notify` | `true` | system notification when Claude finishes or needs permission and the game isn't open |
 | `launcher` | `"auto"` | `tmux`, `iterm`, `terminal`, or `none` |
 | `split` | `"auto"` | tmux pane `right` or `below`; auto picks right on wide terminals |

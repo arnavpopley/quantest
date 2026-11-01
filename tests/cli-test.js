@@ -90,6 +90,25 @@ check("old single-market saves still load", Q.saves().cs && Q.saves().cs.seed ==
 
 check("key splitter separates arrows from typing", JSON.stringify(Q.splitKeys("12\x1b[A\t")) === JSON.stringify(["1", "2", "\x1b[A", "\t"]));
 
+// ---- pause: z in the game and qt pause / resume ----
+check("parse 90 as minutes", C.parseMinutes("90") === 90 && C.parseMinutes("1.5h") === 90 && C.parseMinutes("30m") === 30 && isNaN(C.parseMinutes("soon")));
+check("durations read naturally", C.mins(60) === "1h" && C.mins(30) === "30m" && C.mins(90) === "1h30m");
+C.unpause();
+process.stdout.columns = 80;
+Q.onKey("z");
+check("z pauses auto-open for the configured hour", Math.abs(C.pausedUntil() - (Date.now() + 60 * 60000)) < 5000);
+check("game shows it is paused", /auto-open off till \d\d:\d\d/.test(strip(Q.screen()[0])), strip(Q.screen()[0]));
+check("footer offers unpause", Q.screen().some(l => /z unpause/.test(strip(l))));
+Q.onKey("z");
+check("z again unpauses", C.pausedUntil() === 0);
+const qt = a => spawnSync(process.execPath, [path.join(ROOT, "cli/quantest.js")].concat(a), { encoding: "utf8", env: process.env });
+let out = qt(["pause", "30m"]).stdout;
+check("qt pause 30m pauses for half an hour", /Paused for 30m/.test(out) && Math.abs(C.pausedUntil() - (Date.now() + 30 * 60000)) < 5000, out);
+check("qt status reports the pause", /paused until/.test(qt(["status"]).stdout));
+out = qt(["resume"]).stdout;
+check("qt resume unpauses", /Unpaused/.test(out) && C.pausedUntil() === 0, out);
+check("qt pause rejects nonsense", qt(["pause", "later"]).status === 1);
+
 // ---- the hook keeps per-session status and never writes to stdout ----
 C.writeJSON(C.FILES.config, Object.assign({}, C.DEFAULT_CONFIG, { launcher: "none", openAfter: 0, notify: false }));
 function hook(ev, extra) {
@@ -110,6 +129,12 @@ check("tool use after approval marks it busy again", status() === "busy");
 r = hook("Stop");
 check("stop marks it done", status() === "done" && r.stdout === "");
 check("summary sees the finished session", C.claudeSummary().done.length === 1 && C.claudeSummary().done[0].cwd === "/tmp/proj");
+C.pause(60);
+hook("UserPromptSubmit"); 
+check("while paused, Claude is still tracked", status() === "busy");
+r = hook("Stop");
+check("while paused, stop still marks done and prints nothing", status() === "done" && r.stdout === "" && r.status === 0);
+C.unpause();
 hook("SessionEnd", { reason: "prompt_input_exit" });
 check("session end forgets it", status() === undefined);
 

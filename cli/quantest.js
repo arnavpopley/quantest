@@ -6,6 +6,8 @@
 //   qt --toggle        open the game beside Claude, focus it, or go back (bind this to a key)
 //   qt --open          open the game beside Claude now
 //   qt status          what Claude Code is doing
+//   qt pause [time]    stop the game opening on its own for an hour (or 30m, 2h...); z in the game
+//   qt resume          let it open on its own again
 //   qt config          show settings and where they live
 "use strict";
 const fs = require("fs");
@@ -190,8 +192,10 @@ function claudeBadge() {
 function header() {
   const left = c.bold(c.blue(" QUANTEST"));
   const right = claudeBadge() + " ";
-  let l = left;
-  if (W - vlen(l) - vlen(right) < 1) l = c.bold(c.blue(" QUANTEST"));
+  const until = C.pausedUntil();
+  let l = left + (until ? c.yellow("  ⏸ auto-open off till " + C.hhmm(until)) : "");
+  if (W - vlen(l) - vlen(right) < 1) l = left + (until ? c.yellow(" ⏸ " + C.hhmm(until)) : "");
+  if (W - vlen(l) - vlen(right) < 1) l = left;
   const gap = W - vlen(l) - vlen(right);
   const lines = [(gap >= 1 ? l + " ".repeat(gap) : "") + right];
   if (S.screen === "game") lines.push(tabBar());
@@ -204,6 +208,7 @@ function header() {
     if (vlen(text) > W) text = text.slice(0, W - 1) + "…";
     lines.push((b.kind === "waiting" ? c.bgRed : c.bgGreen)(padR(text, W)));
   }
+  if (S.flash && Date.now() < S.flash.until) wrap(S.flash.text, W - 2).forEach(t => lines.push(c.bgYellow(padR(" " + t, W))));
   return lines;
 }
 
@@ -372,15 +377,16 @@ function resultBody() {
 
 function footer() {
   const back = S.origin && (S.origin.pane || S.origin.app) ? "back to Claude" : "quit";
+  const z = ["z", C.pausedUntil() ? "unpause" : "pause " + C.mins(C.config().pauseFor)];
   let keys;
-  if (S.screen === "menu") keys = [["1-3", "play"], ["enter", "carry on"], ["esc", back]];
+  if (S.screen === "menu") keys = [["1-3", "play"], ["enter", "carry on"], z, ["esc", back]];
   else if (S.phase === "quote") {
     keys = [["enter", "quote"], ["tab", "bid/ask"], ["↑↓", S.run.kind === "nm" ? "±10%" : "±1"], ["[ ]", "wider/tighter"], ["< >", "shift"]];
     if (S.run.kind === "dl") keys.push(["p", "peek"]);
     if (S.run.kind === "cs") keys.push(["?", "fair value"]);
-    keys.push(["s", "switch game"], ["esc", back]);
-  } else if (S.phase === "fills") keys = [["enter", R.done(S.run) ? "settle" : "next round"], ["1-3 s", "switch game"], ["esc", back]];
-  else keys = [["enter", "next market"], ["1-3 s", "switch game"], ["m", "menu"], ["esc", back]];
+    keys.push(["s", "switch game"], z, ["esc", back]);
+  } else if (S.phase === "fills") keys = [["enter", R.done(S.run) ? "settle" : "next round"], ["1-3 s", "switch game"], z, ["esc", back]];
+  else keys = [["enter", "next market"], ["1-3 s", "switch game"], ["m", "menu"], z, ["esc", back]];
   const lines = [""]; let plain = 0;
   keys.forEach(([k, d]) => {
     const n = k.length + d.length + 3;
@@ -452,6 +458,7 @@ function advance() {
 function onKey(key) {
   if (key === "\x03" || key === "\x1b") return back();
   if (S.banner && S.banner.deadline) { S.banner.deadline = null; render(); return; } // any other key: stay
+  if (key === "z" || key === "Z") return togglePause(); // z is never part of a number
   if (S.screen === "menu") {
     if (/^[123]$/.test(key)) switchTo(R.ORDER[+key - 1]);
     else if (key === "s") switchTo(S.stats.lastKind || "nm");
@@ -541,6 +548,23 @@ function dropGameFile() {
   if (g && g.pid === process.pid) { try { fs.unlinkSync(C.FILES.game); } catch (e) { /* gone */ } }
 }
 
+function flash(text, ms) { S.flash = { text, until: Date.now() + (ms || 4000) }; }
+
+// z: stop the game opening on its own for a while and get out of the way. Claude tracking,
+// notifications, and the jump back to Claude when it finishes all carry on.
+function togglePause() {
+  if (C.pausedUntil()) {
+    C.unpause();
+    flash("Unpaused. The game opens on its own again when Claude starts working.");
+    return render();
+  }
+  const cfg = C.config();
+  const until = C.pause(cfg.pauseFor);
+  if (hasReturn()) return back(); // opened beside Claude: close and go back
+  flash("Paused for " + C.mins(cfg.pauseFor) + ", until " + C.hhmm(until) + ". The game won't open on its own" + (cfg.pauseFocus ? "; you still get switched to Claude when it finishes." : "."), 6000);
+  render();
+}
+
 // Leave: save the market, hand focus back to Claude, exit (the pane or window closes behind us).
 function back() {
   if (leaving) return;
@@ -597,6 +621,8 @@ function play(args) {
 // ---------------- commands ----------------
 function status() {
   const s = C.claudeSummary(), now = Date.now();
+  const until = C.pausedUntil();
+  if (until) console.log("paused until " + C.hhmm(until) + " (qt resume to undo)");
   if (!s.list.length) return console.log("No Claude Code sessions seen yet. Is the hook installed? (node cli/install.js)");
   s.list.forEach(x => {
     const age = x.status === "busy" || x.status === "waiting" ? C.clock(now - (x.since || now)) : "finished " + C.clock(now - (x.finished || x.updated)) + " ago";
@@ -604,6 +630,17 @@ function status() {
   });
   const g = C.runningGame();
   console.log(g ? "game open (" + g.via + ", pid " + g.pid + ")" : "game closed");
+}
+
+function pauseCmd(arg) {
+  const cfg = C.config();
+  const m = arg === undefined ? cfg.pauseFor : C.parseMinutes(arg);
+  if (!(m > 0)) { console.log("Give a time like 30m, 90, or 2h."); process.exit(1); }
+  const until = C.pause(m);
+  const g = C.runningGame();
+  if (g) { try { process.kill(g.pid, "SIGTERM"); } catch (e) { /* already gone */ } } // its market is saved
+  console.log("Paused for " + C.mins(m) + ", until " + C.hhmm(until) + ". The game won't open on its own" +
+    (cfg.pauseFocus ? "; you still get switched back to Claude when it finishes." : ".") + " qt resume to undo.");
 }
 
 function toggle(args) {
@@ -627,9 +664,11 @@ function showConfig() {
 
 const args = parseArgs(process.argv.slice(2));
 if (require.main === module) {
-  if (args.help) console.log(fs.readFileSync(__filename, "utf8").split("\n").slice(1, 9).map(l => l.replace(/^\/\/ ?/, "")).join("\n"));
+  if (args.help) console.log(fs.readFileSync(__filename, "utf8").split("\n").slice(1, 11).map(l => l.replace(/^\/\/ ?/, "")).join("\n"));
   else if (args._[0] === "status") status();
   else if (args._[0] === "config") showConfig();
+  else if (args._[0] === "pause") pauseCmd(args._[1]);
+  else if (args._[0] === "resume" || args._[0] === "unpause") { const was = C.pausedUntil(); C.unpause(); console.log(was ? "Unpaused. The game opens on its own again." : "Wasn't paused."); }
   else if (args.toggle) toggle(args);
   else if (args.open) { if (!L.open(L.captureOrigin())) console.log("Couldn't open a pane or window here."); }
   else play(args);

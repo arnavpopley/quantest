@@ -47,16 +47,18 @@ async function onPrompt(input, cfg) {
   const sid = input.session_id || "default";
   const turn = Math.random().toString(36).slice(2);
   const now = Date.now();
-  const origin = cfg.autoOpen && !C.runningGame() ? L.captureOrigin() : { pane: process.env.TMUX_PANE };
+  const paused = C.pausedUntil() > 0;
+  // where Claude is, so the game (or, while paused, the focus jump) can come back to it
+  const origin = (cfg.autoOpen && !paused && !C.runningGame()) || (paused && cfg.pauseFocus) ? L.captureOrigin() : { pane: process.env.TMUX_PANE };
   C.updateClaude(s => {
-    s.sessions[sid] = { status: "busy", since: now, updated: now, cwd: input.cwd || process.cwd(), turn, pane: origin.pane };
+    s.sessions[sid] = { status: "busy", since: now, updated: now, cwd: input.cwd || process.cwd(), turn, pane: origin.pane, origin };
     return s;
   });
-  if (!cfg.autoOpen || origin.via === "none") return;
+  if (paused || !cfg.autoOpen || origin.via === "none") return;
   await sleep(Math.max(0, cfg.openAfter) * 1000);
   const cur = (C.readJSON(C.FILES.claude, { sessions: {} }).sessions || {})[sid];
   if (!cur || cur.turn !== turn || cur.status !== "busy") return; // quick reply, or a newer prompt took over
-  if (C.runningGame()) return;
+  if (C.runningGame() || C.pausedUntil()) return; // paused during the wait
   if (!takeLock()) return;
   try {
     if (C.runningGame()) return;
@@ -83,23 +85,25 @@ function onNotification(input, cfg) {
   const needsYou = type === "permission_prompt" || type === "elicitation_dialog" || (!type && /permission|needs your|approve/i.test(msg));
   if (!needsYou) return;
   const sid = input.session_id || "default";
-  let cwd = input.cwd;
+  let cwd = input.cwd, origin = null;
   C.updateClaude(s => {
     const x = s.sessions[sid] || { since: Date.now() };
     x.status = "waiting"; x.updated = Date.now(); x.msg = msg || "Claude needs your permission";
     cwd = x.cwd = x.cwd || cwd;
+    origin = x.origin || null;
     s.sessions[sid] = x;
     return s;
   });
   L.notify("Claude needs you", C.project(cwd) + ": " + (msg || "permission requested"), cfg);
+  if (C.pausedUntil() && cfg.pauseFocus && !C.runningGame()) L.focusOrigin(origin);
 }
 
 function onStop(input, cfg) {
   const sid = input.session_id || "default";
-  let since = Date.now(), cwd = input.cwd;
+  let since = Date.now(), cwd = input.cwd, origin = null;
   C.updateClaude(s => {
     const x = s.sessions[sid] || { since: Date.now() };
-    since = x.since || since; cwd = x.cwd = x.cwd || cwd;
+    since = x.since || since; cwd = x.cwd = x.cwd || cwd; origin = x.origin || null;
     x.status = "done"; x.updated = Date.now(); x.finished = Date.now(); delete x.msg;
     s.sessions[sid] = x;
     return s;
@@ -109,6 +113,8 @@ function onStop(input, cfg) {
   // the open game handles its own alert and return; otherwise tell the person, unless it was a quick reply
   if (took >= cfg.openAfter * 1000 && (!game || !cfg.returnAfter)) {
     L.notify("Claude finished", C.project(cwd) + " · " + C.clock(took), cfg);
+    // paused: no game, but still put you back in Claude
+    if (!game && C.pausedUntil() && cfg.pauseFocus) L.focusOrigin(origin);
   }
 }
 

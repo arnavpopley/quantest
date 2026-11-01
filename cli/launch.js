@@ -37,7 +37,8 @@ function captureOrigin(env) {
   env = env || process.env;
   const o = { via: detect(env) };
   if (env.TMUX_PANE) o.pane = env.TMUX_PANE;
-  if (isMac && o.via !== "tmux" && o.via !== "none") {
+  // on macOS also note the app (Terminal, iTerm2, VS Code...) so it can be brought to the front later
+  if (isMac && o.via !== "none") {
     o.app = osa(["id of application (path to frontmost application as text)"]);
     if (o.app === MAC_APPS.terminal) o.window = num(osa(['tell application "Terminal" to id of front window']));
     else if (o.app === MAC_APPS.iterm) o.window = num(osa(['tell application "iTerm2" to id of current window']));
@@ -169,6 +170,24 @@ function returnFocus(game) {
   child.unref();
 }
 
+// Bring Claude's terminal to the front without any game involved: raise its app or window on
+// macOS, then select its tmux window and pane. Used while the game is paused.
+function focusOrigin(o) {
+  if (!o) return false;
+  let ok = false;
+  if (isMac && o.app) {
+    const lines = ["tell application id " + asStr(o.app) + " to activate"];
+    if (o.window !== undefined && o.app === MAC_APPS.terminal) lines.push('tell application "Terminal"', "try", "set index of (first window whose id is " + o.window + ") to 1", "end try", "end tell");
+    if (o.window !== undefined && o.app === MAC_APPS.iterm) lines.push('tell application "iTerm2"', "try", "select (first window whose id is " + o.window + ")", "end try", "end tell");
+    ok = osa(lines) !== null;
+  }
+  if (o.pane) {
+    sh("tmux", ["select-window", "-t", o.pane]);
+    ok = sh("tmux", ["select-pane", "-t", o.pane]) !== null || ok;
+  }
+  return ok;
+}
+
 function notify(title, message, cfg) {
   cfg = cfg || C.config();
   if (!cfg.notify) return;
@@ -180,4 +199,4 @@ function notify(title, message, cfg) {
   if (process.env.TMUX) sh("tmux", ["display-message", title + " · " + message]);
 }
 
-module.exports = { detect, captureOrigin, open, focus, isFocused, returnFocus, notify, playScript };
+module.exports = { detect, captureOrigin, open, focus, isFocused, returnFocus, focusOrigin, notify, playScript };
